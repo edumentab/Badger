@@ -1,0 +1,16 @@
+{
+  "name": "CheckedSQL",
+  "description": "Write me!",
+  "version": "0.1",
+  "perl": "6.*",
+  "auth": "Write me!",
+  "depends": [],
+  "build-depends": [],
+  "test-depends": [],
+  "provides": {
+    "CheckedSQL": "lib/CheckedSQL.pm6"
+  },
+  "resources": [],
+  "license": "Write me!",
+  "source-url": "Write me!"
+}
