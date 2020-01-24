@@ -148,8 +148,8 @@ class FileActions {
     }
     method return:typed-sigil ($/) {
         given ~$<sigil> {
-            when '@' { make AST::Return::MultiTyped(type-name => ~$<type>) }
-            when '$' { make AST::Return::Typed(type-name => ~$<type>) }
+            when '@' { make AST::Return::MultiTyped.new(type-name => ~$<type>) }
+            when '$' { make AST::Return::Typed.new(type-name => ~$<type>) }
             default { die }
         }
     }
@@ -175,7 +175,7 @@ my sub make-populate-class(Code $f) {
     class POPULATE-CLASS {
         has Code $.f;
         method populate($obj) {
-            $.f($obj)
+            $!f($obj)
         }
     }.new(:$f)
 }
@@ -197,35 +197,39 @@ multi sub build-return-class($, AST::Return::Scalar) {
 }
 
 multi sub build-return-class($, AST::Return::Typed $typed) {
-    make-populate-class({ $typed.type.new(.hash) })
+    make-populate-class({ $typed.type.new(|.hash) })
 }
 
 multi sub build-return-class($, AST::Return::MultiTyped $typed) {
-    my $type = $typed.type;
-    make-populate-class({ .hashes.map({ $type.new($_) }) })
+    make-populate-class({
+        my $type = $typed.type;
+        .hashes.map({
+            $type.new(|$_)
+        })
+    })
 }
 
 multi sub build-return-class($name, AST::Return:D $return) {
+    die;
     my $return-class = Metamodel::ClassHOW.new_type(:name("ReturnType-$name"));
     for $return.attributes -> $attr {
         $return-class.^add_attribute(Attribute.new(
-                :name($attr.sigil ~ '!' ~ $attr.name),
-                :type($attr.type),
-                :has_accessor(1),
-                :package($return-class),
-                :required
-                ));
+            :name($attr.sigil ~ '!' ~ $attr.name),
+            :type($attr.type),
+            :has_accessor(1),
+            :package($return-class),
+            :required
+        ));
     }
     # TODO "Int $.affected-rows is required;"?
     $return-class.^add_method("populate", method ($obj) {
         # $.affected-rows = $obj.rows;
-        $obj.hashes # TODO
+        $obj.hashes.map({ $return-class.new(|$_) })
     });
     $return-class.^compose;
 }
 
 sub gen-sql-sub(AST::Module:D $module) {
-    #say $module;
     my $name = $module.name;
     my $return-class = build-return-class($name, $module.return);
 
@@ -233,7 +237,6 @@ sub gen-sql-sub(AST::Module:D $module) {
     for $module.param -> $param {
         $params.push: Parameter.new(:name($param.name), :mandatory, :type($param.type));
     }
-    say Signature.new(:returns($return-class), :count(1.Num + $module.param.Num), :params($params.List));
 
     return "&$name" => (sub ($connection, *@params) {
         die "SQL query $name takes $module.param.elems() SQL arguments, got @params.elems()." unless @params == $module.param;
@@ -246,22 +249,14 @@ sub gen-sql-sub(AST::Module:D $module) {
 }
 
 sub EXPORT(File $file) {
-    my %queries;
-    try {
-        my $content = $file.IO.slurp;
-        say $content;
-        my $ast = FileGrammar.parse($content, :actions(FileActions.new));
-        # TODO remove all this debugging code
-        with $ast {
-            my @h = $ast.made.map(&gen-sql-sub).flat;
-            dd @h;
-            return @h.hash;
-        } else {
-            say "No AST";
-            return %();
-        }
-        CATCH {
-            default { .say; }
-        }
+    my $content = $file.IO.slurp;
+    my $ast = FileGrammar.parse($content, :actions(FileActions.new));
+    # TODO remove all this debugging code
+    with $ast {
+        my @h = $ast.made.map(&gen-sql-sub).flat;
+        dd @h;
+        return @h.hash;
+    } else {
+        return Map.new;
     }
 }

@@ -15,7 +15,7 @@ sub make-query-class(Any:U $return-class) {
 
 {
     use CheckedSQL <t/sql/00-count.sql>;
-    my $runner = make-query-class(class TEST1 { method rows { 3 } });
+    my $runner = make-query-class(class TEST0 { method rows { 3 } });
     my $result = base-query($runner, 1, 2);
     is $result, 3;
     is $runner.last-params, (1, 2);
@@ -25,7 +25,7 @@ sub make-query-class(Any:U $return-class) {
 
 {
     use CheckedSQL <t/sql/01-scalar.sql>;
-    my $runner = make-query-class(class TEST2 { method value { 1 } });
+    my $runner = make-query-class(class TEST1 { method value { 1 } });
     my $result = base-query($runner);
     is $result, 1;
     is $runner.last-params, ();
@@ -33,12 +33,61 @@ sub make-query-class(Any:U $return-class) {
             "Should be running from the file";
 }
 
-#(--> +)  returns the count (thinking of +@, which is valid in a signature, and +@a as an expression
-#(--> @) returns a list of hashes
-#(--> Foo @) returns a list of Foo.new(|%current-line)
-#not sure about $ vs % ?
-#(--> %) returns the first line
-#(--> Foo $) returns Foo.new(|%the-first-line)
-#?
+{
+    use CheckedSQL <t/sql/02-typed-scalar.sql>;
+    my $new-called = False;
+    class Result2 {
+        has $.result;
+        submethod BUILD(:$!result!) {
+            $new-called = True;
+        }
+    }
+    my $runner = make-query-class(class TEST2 { method hash { result => 1 } });
+    my $result = base-query($runner);
+    ok $result ~~ Result2;
+    is $result.result, 1;
+    ok $new-called, "It went through Result2";
+    is $runner.last-params, ();
+}
+
+{
+    use CheckedSQL <t/sql/03-hash.sql>;
+    my $runner = make-query-class(class TEST3 { method hash { result => 1 } });
+    my %result = base-query($runner);
+    is-deeply %result, %(result => 1);
+    is $runner.last-params, ();
+}
+
+{
+    throws-like { EVAL "use CheckedSQL <t/sql/04-typed-hash-FAIL.sql>" },
+        Exception, message => /'Hash return cannot have a type ascription'/;
+}
+
+{
+    use CheckedSQL <t/sql/05-array.sql>;
+    my $runner = make-query-class(class TEST5 { method hashes { {result => 1}, {result => 2} } });
+    my @result = base-query($runner);
+    is-deeply @result, [{result => 1}, {result => 2}];
+    is $runner.last-params, ();
+}
+
+{
+    use CheckedSQL <t/sql/06-typed-array.sql>;
+    my $new-called = False;
+    class Result6 {
+        has $.result;
+        submethod BUILD(:$!result!) {
+            $new-called = True;
+        }
+    }
+    my $runner = make-query-class(class TEST6 { method hashes { @({result => 1}, {result => 2}) } });
+    my @result = base-query($runner);
+    ok all(@result) ~~ Result6;
+    is +@result, 2;
+    ok $new-called, "It went through Result6";
+    is @result[0].result, 1;
+    is @result[1].result, 2;
+    is $runner.last-params, ();
+}
 
 done-testing;
