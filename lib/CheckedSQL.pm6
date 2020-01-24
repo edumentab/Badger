@@ -11,7 +11,10 @@ role AST::Typed {
 }
 
 class AST::Param does AST::Typed {
+    has Str $.sigil;
     has Str $.name;
+
+    method Str { $.sigil ~ $.name }
 }
 
 class AST::Return is repr('Uninstantiable') { }
@@ -77,13 +80,15 @@ grammar FileGrammar {
 
     multi token param:untyped {
         $<sigil>=<[$@%]> <name>
-        { @*param-names.push: ~$<name> }
+        [ <?{ ~$<name> (elem) @*param-names }> <.panic: "Duplicate parameter name: $<name>">
+        || { @*param-names.push: ~$<name> } ]
     }
 
     multi token param:typed {
         $<type>=<.qualified-name> \s+
-        $<sigil>=<[$@%]> <name>
-        { @*param-names.push: ~$<name> }
+        $<sigil>=<[ $ @ % ]> <name>
+        [ <?{ ~$<name> (elem) @*param-names }> <.panic: "Duplicate parameter name: $<name>">
+        || { @*param-names.push: ~$<name> } ]
     }
 
     proto token return { * }
@@ -93,7 +98,7 @@ grammar FileGrammar {
     multi token return:sigil { (<[ $ @ % ]>) }
 
     multi token return:typed-sigil {
-        $<type>=<.qualified-name> \s+
+        $<type>=<.qualified-name> <|b> \s*
         [  $<sigil>=<[ $ @ ]>
         || '%' <.panic: "Hash return cannot have a type ascription">
         || <.panic: "Expected sigil after return type ascription">
@@ -131,7 +136,7 @@ class FileActions {
     method sig($/) {
         make AST::Sig.new(
             :param($<param>>>.made),
-            :return($<return>.made)
+            :return($<return> ?? $<return>.made !! AST::Return::Count.new) # default to `+`
         );
     }
 
@@ -143,14 +148,14 @@ class FileActions {
             when '@' { make AST::Return::MultiHash.new }
             when '%' { make AST::Return::SingleHash.new }
             when '$' { make AST::Return::Scalar.new }
-            default { die }
+            default { die "Unrecognized sigil" }
         }
     }
     method return:typed-sigil ($/) {
         given ~$<sigil> {
             when '@' { make AST::Return::MultiTyped.new(type-name => ~$<type>) }
             when '$' { make AST::Return::Typed.new(type-name => ~$<type>) }
-            default { die }
+            default { die "Unrecognized sigil" }
         }
     }
 
@@ -191,7 +196,6 @@ multi sub build-return-class($, AST::Return::SingleHash) {
 multi sub build-return-class($, AST::Return::MultiHash) {
     make-populate-class(*.hashes)
 }
-
 multi sub build-return-class($, AST::Return::Scalar) {
     make-populate-class(*.value)
 }
@@ -210,7 +214,7 @@ multi sub build-return-class($, AST::Return::MultiTyped $typed) {
 }
 
 multi sub build-return-class($name, AST::Return:D $return) {
-    die;
+    die "NYI, AST::Return::Create and AST::Return::MultiCreate";
     my $return-class = Metamodel::ClassHOW.new_type(:name("ReturnType-$name"));
     for $return.attributes -> $attr {
         $return-class.^add_attribute(Attribute.new(
@@ -237,10 +241,23 @@ sub gen-sql-sub(AST::Module:D $module) {
     for $module.param -> $param {
         $params.push: Parameter.new(:name($param.name), :mandatory, :type($param.type));
     }
+    my @names = $module.param.map({ .sigil ~ .name });
+
+    my $sql = $module.content.subst(/<[$@%]> (<[- \w]>+)/, {
+        with @names.first(~$/, :k) {
+            '$' ~ 1 + $_
+        } else {
+            if $module.param.grep({ $0.fc eq .name.fc }) -> @vars {
+                die "Unknown parameter $/, do you mean $(@vars.join: " or ")?";
+            } else {
+                die "Unknown parameter: $/";
+            }
+        }
+    }, :g);
 
     return "&$name" => (sub ($connection, *@params) {
         die "SQL query $name takes $module.param.elems() SQL arguments, got @params.elems()." unless @params == $module.param;
-        $return-class.populate($connection.query($module.content, @params));
+        $return-class.populate($connection.query($sql, @params));
     } but role {
         method signature {
             return Signature.new(:returns($return-class), :count(1.Num), :params($params.List));
