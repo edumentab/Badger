@@ -257,7 +257,7 @@ sub gen-sql-sub(AST::Module:D $module) {
 
     return "&$name" => (sub ($connection, *@params) {
         die "SQL query $name takes $module.param.elems() SQL arguments, got @params.elems()." unless @params == $module.param;
-        $return-class.populate($connection.query($sql, @params));
+        $return-class.populate($connection.query($sql, |@params));
     } but role {
         method signature {
             return Signature.new(:returns($return-class), :count(1.Num), :params($params.List));
@@ -271,7 +271,7 @@ sub EXPORT(File $file) {
     # TODO remove all this debugging code
     with $ast {
         my @h = $ast.made.map(&gen-sql-sub).flat;
-        dd @h;
+        #dd @h;
         return @h.hash;
     } else {
         return Map.new;

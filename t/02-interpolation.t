@@ -23,16 +23,19 @@ use Test;
 
 my class TEMP-QUERY-CLASS {
     has $.last-query;
-    method query(::?CLASS:D: $!last-query, @) {
-        class { method rows { 0 } }.new
+    method query(::?CLASS:D: $!last-query, *@) {
+        class {
+            method rows { 0 }
+            method value { 5 }
+        }.new
     }
 }
 
 {
     use CheckedSQL <t/sql/02/05-with-params.sql>;
     my $runner = TEMP-QUERY-CLASS.new;
-    base-query($runner, 1, 2);
-    is $runner.last-query, 'SELECT $1 + $2;';
+    base-query($runner, 2, 3);
+    is $runner.last-query, 'SELECT $1::int + $2::int;';
 }
 
 {

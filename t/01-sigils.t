@@ -4,7 +4,7 @@ sub make-query-class(Any:U $return-class) {
     my class TEMP-QUERY-CLASS {
         has @.last-params;
         has $.return-class;
-        method query(::?CLASS:D: $, @!last-params) {
+        method query(::?CLASS:D: $, *@!last-params) {
             $.return-class.new
         }
     }.new(:$return-class)
