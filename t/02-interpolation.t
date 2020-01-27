@@ -35,7 +35,7 @@ my class TEMP-QUERY-CLASS {
     use CheckedSQL <t/sql/02/05-with-params.sql>;
     my $runner = TEMP-QUERY-CLASS.new;
     base-query($runner, 2, 3);
-    is $runner.last-query, 'SELECT $1::int + $2::int;';
+    is $runner.last-query, 'SELECT ($1::int) + ($2::int);';
 }
 
 {
@@ -46,6 +46,20 @@ my class TEMP-QUERY-CLASS {
 {
     throws-like { EVAL "use CheckedSQL <t/sql/02/07-unknown-param-suggest-FAIL.sql>" },
             Exception, message => /'Unknown parameter @a, do you mean $a or $A?'/;
+}
+
+{
+    use CheckedSQL <t/sql/02/08-with-params-untyped.sql>;
+    my $runner = TEMP-QUERY-CLASS.new;
+    base-query($runner, 2, 3);
+    is $runner.last-query, 'SELECT $1 + $2;';
+}
+
+{
+    use CheckedSQL <t/sql/02/09-with-params-array.sql>;
+    my $runner = TEMP-QUERY-CLASS.new;
+    base-query($runner, $[1,2,3]);
+    is $runner.last-query, 'SELECT ($1::array[int]);';
 }
 
 done-testing;

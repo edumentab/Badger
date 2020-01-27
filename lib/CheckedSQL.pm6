@@ -14,16 +14,32 @@ class AST::Param does AST::Typed {
     has Str $.sigil;
     has Str $.name;
 
-    method Str { $.sigil ~ $.name }
+    method Str {
+        $.sigil ~ $.name
+    }
 }
 
-class AST::Return is repr('Uninstantiable') { }
-class AST::Return::SingleHash is AST::Return { }
-class AST::Return::MultiHash is AST::Return { }
-class AST::Return::Scalar is AST::Return { }
-class AST::Return::Count is AST::Return { }
-class AST::Return::Typed is AST::Return does AST::Typed { }
-class AST::Return::MultiTyped is AST::Return does AST::Typed { }
+class AST::Return is repr('Uninstantiable') {
+
+}
+class AST::Return::SingleHash is AST::Return {
+
+}
+class AST::Return::MultiHash is AST::Return {
+
+}
+class AST::Return::Scalar is AST::Return {
+
+}
+class AST::Return::Count is AST::Return {
+
+}
+class AST::Return::Typed is AST::Return does AST::Typed {
+
+}
+class AST::Return::MultiTyped is AST::Return does AST::Typed {
+
+}
 
 class AST::Sig {
     has AST::Param:D @.param is required;
@@ -122,7 +138,7 @@ grammar FileGrammar {
 
 class FileActions {
     method TOP($/) {
-        make $<module>>>.made;
+        make $<module>>>.made
     }
 
     method module($/) {
@@ -130,14 +146,14 @@ class FileActions {
             :name(~$<header><name>),
             :sig($<header><sig>.made),
             :content(~$<content>),
-        );
+        )
     }
 
     method sig($/) {
         make AST::Sig.new(
             :param($<param>>>.made),
             :return($<return> ?? $<return>.made !! AST::Return::Count.new) # default to `+`
-        );
+        )
     }
 
     method return:count ($/) {
@@ -233,6 +249,20 @@ multi sub build-return-class($name, AST::Return:D $return) {
     $return-class.^compose;
 }
 
+#| Automatically adds an annotation for the type in case we know it in advance
+sub type-to-ascription(AST::Param $param) {
+    my $sql-type = do given $param.type {
+        when Int { "int" }
+        when Str { "text" }
+        default { return Nil }
+    }
+
+    given $param.sigil {
+        when "@" { "array[$sql-type]" }
+        default { $sql-type }
+    }
+}
+
 sub gen-sql-sub(AST::Module:D $module) {
     my $name = $module.name;
     my $return-class = build-return-class($name, $module.return);
@@ -244,8 +274,12 @@ sub gen-sql-sub(AST::Module:D $module) {
     my @names = $module.param.map({ .sigil ~ .name });
 
     my $sql = $module.content.subst(/<[$@%]> (<[- \w]>+)/, {
-        with @names.first(~$/, :k) {
-            '$' ~ 1 + $_
+        with @names.first(~$/, :k) -> $i {
+            with type-to-ascription($module.param[$i]) {
+                '($' ~ 1 + $i ~ "::$_)"
+            } else {
+                '$' ~ 1 + $i
+            }
         } else {
             if $module.param.grep({ $0.fc eq .name.fc }) -> @vars {
                 die "Unknown parameter $/, do you mean $(@vars.join: " or ")?";
