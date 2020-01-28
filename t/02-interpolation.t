@@ -62,4 +62,11 @@ my class TEMP-QUERY-CLASS {
     is $runner.last-query, 'SELECT ($1::array[int]);';
 }
 
+{
+    use CheckedSQL <t/sql/02/10-with-same-param.sql>;
+    my $runner = TEMP-QUERY-CLASS.new;
+    base-query($runner, 0);
+    is $runner.last-query, 'SELECT ($1::int) + ($1::int);';
+}
+
 done-testing;

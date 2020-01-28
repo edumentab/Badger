@@ -122,7 +122,7 @@ grammar FileGrammar {
     }
 
     token content {
-        [ ^^ <!before '--'> .+ $$ ]+%% \n
+        [ ^^ <!before '--'> \N+ $$ ]+%% \n
     }
 
     token qualified-name { <name>+ % '::' }
@@ -253,6 +253,7 @@ multi sub build-return-class($name, AST::Return:D $return) {
 sub type-to-ascription(AST::Param $param) {
     my $sql-type = do given $param.type {
         when Int { "int" }
+        when Rat { "float" }
         when Str { "text" }
         default { return Nil }
     }
@@ -273,7 +274,7 @@ sub gen-sql-sub(AST::Module:D $module) {
     }
     my @names = $module.param.map({ .sigil ~ .name });
 
-    my $sql = $module.content.subst(/<[$@%]> (<[- \w]>+)/, {
+    my $sql = $module.content.trim.subst(/<[$@%]> (<[- \w]>+)/, {
         with @names.first(~$/, :k) -> $i {
             with type-to-ascription($module.param[$i]) {
                 '($' ~ 1 + $i ~ "::$_)"
