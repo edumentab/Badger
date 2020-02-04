@@ -1,3 +1,5 @@
+no precompilation;
+
 module AST {
 
 }
@@ -75,6 +77,7 @@ grammar FileGrammar {
 
     token module {
         :my @*param-names;
+        :my $*param-has-named = False;
         <header>
         <content>
     }
@@ -92,17 +95,22 @@ grammar FileGrammar {
         ['-->' <return>]?
     }
 
+    token named {
+        [ ':' { $*param-has-named = True; }
+        || <?{ $*param-has-named }> <.panic: "Cannot have a positional parameter after a named one"> ]?
+    }
+
     proto token param { * }
 
     multi token param:untyped {
-        $<sigil>=<[$@%]> <name>
+        $<sigil>=<[$@%]> <named> <name>
         [ <?{ ~$<name> (elem) @*param-names }> <.panic: "Duplicate parameter name: $<name>">
         || { @*param-names.push: ~$<name> } ]
     }
 
     multi token param:typed {
         $<type>=<.qualified-name> \s+
-        $<sigil>=<[ $ @ % ]> <name>
+        <named> $<sigil>=<[ $ @ % ]> <name>
         [ <?{ ~$<name> (elem) @*param-names }> <.panic: "Duplicate parameter name: $<name>">
         || { @*param-names.push: ~$<name> } ]
     }
@@ -122,7 +130,7 @@ grammar FileGrammar {
     }
 
     token content {
-        [ ^^ <!before '--'> \N+ $$ ]+%% \n
+        [ ^^ <!before '--' <.ws> 'sub' <.ws>> \N* $$ ]+%% \n
     }
 
     token qualified-name { <name>+ % '::' }
@@ -175,10 +183,15 @@ class FileActions {
         }
     }
 
+    method named ($/) {
+        $/ eq ":"
+    }
+
     method param:untyped ($/) {
         make AST::Param.new(
             sigil => ~$<sigil>,
             name => ~$<name>,
+            named => $<named>.made,
         )
     }
     method param:typed ($/) {
@@ -186,42 +199,44 @@ class FileActions {
             sigil => ~$<sigil>,
             name => ~$<name>,
             type-name => ~$<type>,
+            named => $<named>.made,
         )
     }
 }
 
 subset File of Str where *.IO.e;
 
-my sub make-populate-class(Code $f) {
-    class POPULATE-CLASS {
-        has Code $.f;
-        method populate($obj) {
-            $!f($obj)
-        }
-    }.new(:$f)
+class PopulateClass {
+    has Code $.fn;
+    method populate($obj) {
+        say "POPULATE";
+        say $.fn;
+        dd $obj;
+        $!fn($obj)
+    }
 }
 
 multi sub build-return-class($, AST::Return::Count) {
-    make-populate-class(*.rows)
+    PopulateClass.new(fn => { $_ ~~ Int ?? $_ !! .rows }) # TODO is .rows ever useful?
 }
 
 multi sub build-return-class($, AST::Return::SingleHash) {
-    make-populate-class(*.hash)
+    PopulateClass.new(fn => *.hash)
 }
 
 multi sub build-return-class($, AST::Return::MultiHash) {
-    make-populate-class(*.hashes)
+    PopulateClass.new(fn => *.hashes)
 }
 multi sub build-return-class($, AST::Return::Scalar) {
-    make-populate-class(*.value)
+    PopulateClass.new(fn => *.value)
 }
 
 multi sub build-return-class($, AST::Return::Typed $typed) {
-    make-populate-class({ $typed.type.new(|.hash) })
+    PopulateClass.new(fn => { $typed.type.new(|.hash) })
 }
 
 multi sub build-return-class($, AST::Return::MultiTyped $typed) {
-    make-populate-class({
+    PopulateClass.new(fn => {
         my $type = $typed.type;
         .hashes.map({
             $type.new(|$_)
@@ -264,6 +279,13 @@ sub type-to-ascription(AST::Param $param) {
     }
 }
 
+role SignatureOverload[$sig] {
+  # Enable this to see the optimizer fail
+  #method signature {
+  #  $sig
+  #}
+}
+
 sub gen-sql-sub(AST::Module:D $module) {
     my $name = $module.name;
     my $return-class = build-return-class($name, $module.return);
@@ -290,14 +312,19 @@ sub gen-sql-sub(AST::Module:D $module) {
         }
     }, :g);
 
-    return "&$name" => (sub ($connection, *@params) {
-        die "SQL query $name takes $module.param.elems() SQL arguments, got @params.elems()." unless @params == $module.param;
-        $return-class.populate($connection.query($sql, |@params));
-    } but role {
-        method signature {
-            return Signature.new(:returns($return-class), :count(1.Num), :params($params.List));
+    my $sig = Signature.new(:returns($return-class), :count(1.Num), :params($params.List));
+
+    return "&$name" => (sub ($connection, *@params, *%named-params) {
+        unless @params == $module.param {
+            die "SQL query $name takes $module.param.elems() SQL arguments, got @params.elems().";
         }
-    }), "ReturnType-$name" => $return-class;
+        if %named-params.keys (-) <my named params> {
+            die "Extra named parameters for SQL query $name: $_. Named parameters: TODO.";
+        }
+        my $query = $connection.query($sql, |@params);
+        return $query ~~ Int ?? $query !! $return-class.populate($query);
+    } does SignatureOverload.^parameterize($sig)),
+      "ReturnType-$name" => $return-class;
 }
 
 sub EXPORT(File $file) {

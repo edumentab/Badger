@@ -14,6 +14,11 @@ my class TEMP-QUERY-CLASS {
     is $runner.last-query, 'SELECT 1;';
     query2($runner);
     is $runner.last-query, 'SELECT 2;';
+    query3($runner);
+    is $runner.last-query, trim(q:to/END/);
+-- note the whitespace before this
+SELECT 3;
+END
 }
 
 {
