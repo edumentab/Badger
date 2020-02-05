@@ -15,6 +15,7 @@ role AST::Typed {
 class AST::Param does AST::Typed {
     has Str $.sigil;
     has Str $.name;
+    has Bool $.named;
 
     method Str {
         $.sigil ~ $.name
@@ -44,14 +45,25 @@ class AST::Return::MultiTyped is AST::Return does AST::Typed {
 }
 
 class AST::Sig {
+    has AST::Param:D @.by-name is required;
+    has AST::Param:D @.by-pos is required;
     has AST::Param:D @.param is required;
     has AST::Return:D $.return is required;
+
+    submethod BUILD(:$!return, :@param) {
+        # Sort by-name so that we can deal with incoming parameters more easily later on
+        @!by-name = @param.grep(*.named).sort(*.name);
+        @!by-pos = @param.grep(!*.named);
+
+        @!param = |@!by-pos, |@!by-name;
+        dd @!param;
+    }
 }
 
 class AST::Module {
     has Str $.name;
     has Str $.content;
-    has AST::Sig:D $.sig is required handles <param return>;
+    has AST::Sig:D $.sig is required handles <param return by-name by-pos>;
 }
 
 class X::ParseFail is Exception {
@@ -103,7 +115,7 @@ grammar FileGrammar {
     proto token param { * }
 
     multi token param:untyped {
-        $<sigil>=<[$@%]> <named> <name>
+        <named> $<sigil>=<[$@%]> <name>
         [ <?{ ~$<name> (elem) @*param-names }> <.panic: "Duplicate parameter name: $<name>">
         || { @*param-names.push: ~$<name> } ]
     }
@@ -184,7 +196,7 @@ class FileActions {
     }
 
     method named ($/) {
-        $/ eq ":"
+        make $/ eq ":"
     }
 
     method param:untyped ($/) {
@@ -209,15 +221,12 @@ subset File of Str where *.IO.e;
 class PopulateClass {
     has Code $.fn;
     method populate($obj) {
-        say "POPULATE";
-        say $.fn;
-        dd $obj;
         $!fn($obj)
     }
 }
 
 multi sub build-return-class($, AST::Return::Count) {
-    PopulateClass.new(fn => { $_ ~~ Int ?? $_ !! .rows }) # TODO is .rows ever useful?
+    PopulateClass.new(fn => *.rows)
 }
 
 multi sub build-return-class($, AST::Return::SingleHash) {
@@ -292,12 +301,13 @@ sub gen-sql-sub(AST::Module:D $module) {
 
     my $params := Array.new(Parameter.new(:name('$connection'), :mandatory, :type(Any)));
     for $module.param -> $param {
-        $params.push: Parameter.new(:name($param.name), :mandatory, :type($param.type));
+        $params.push: Parameter.new(:name($param.name), :mandatory, :type($param.type), :named($param.named));
     }
-    my @names = $module.param.map({ .sigil ~ .name });
+    my @arg-names = $module.param.map({ .sigil ~ .name });
+    my @named-names = $module.by-name.map(*.name);
 
     my $sql = $module.content.trim.subst(/<[$@%]> (<[- \w]>+)/, {
-        with @names.first(~$/, :k) -> $i {
+        with @arg-names.first(~$/, :k) -> $i {
             with type-to-ascription($module.param[$i]) {
                 '($' ~ 1 + $i ~ "::$_)"
             } else {
@@ -315,13 +325,17 @@ sub gen-sql-sub(AST::Module:D $module) {
     my $sig = Signature.new(:returns($return-class), :count(1.Num), :params($params.List));
 
     return "&$name" => (sub ($connection, *@params, *%named-params) {
-        unless @params == $module.param {
-            die "SQL query $name takes $module.param.elems() SQL arguments, got @params.elems().";
+        unless @params == $module.by-pos {
+            die "SQL query $name takes $module.by-pos.elems() positional SQL arguments, got @params.elems().";
         }
-        if %named-params.keys (-) <my named params> {
-            die "Extra named parameters for SQL query $name: $_. Named parameters: TODO.";
+        if %named-params.keys (-) @named-names -> $extra {
+            die "Extra named parameters for SQL query $name: $($extra.keys.sort.join: ", "). Named parameters: $($module.by-name.map(*.name).join: ", ").";
         }
-        my $query = $connection.query($sql, |@params);
+        my %by-name-params = %(@named-names X=> Nil), %named-params;
+
+        my $query = $connection.query($sql, |@params, %by-name-params.sort(*.key).map(*.value));
+        # NOTE DB::Pg returns an Int for non-SELECT queries. We should probably abstract all this in some adapter class.
+        # TODO Maybe make sure that we have a AST::Return::Count in that case?
         return $query ~~ Int ?? $query !! $return-class.populate($query);
     } does SignatureOverload.^parameterize($sig)),
       "ReturnType-$name" => $return-class;

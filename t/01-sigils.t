@@ -83,10 +83,8 @@ sub make-query-class(Any:U $return-class) {
     is $runner.last-params, ();
 }
 
-{
-    throws-like { EVAL "use CheckedSQL <t/sql/01/07-no-sigil-after-type-FAIL.sql>" },
-            Exception, message => /'Expected sigil after return type ascription'/;
-}
+throws-like { EVAL "use CheckedSQL <t/sql/01/07-no-sigil-after-type-FAIL.sql>" },
+        Exception, message => /'Expected sigil after return type ascription'/;
 
 {
     use CheckedSQL <t/sql/01/08-returnless.sql>;
