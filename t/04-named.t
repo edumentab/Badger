@@ -54,5 +54,16 @@ throws-like { EVAL "use CheckedSQL <t/sql/04/05-dupe-mixed-FAIL.sql>" },
 throws-like { EVAL "use CheckedSQL <t/sql/04/06-pos-after-named-FAIL.sql>" },
         Exception, message => /'Cannot have a positional parameter after a named one'/;
 
+{
+    use CheckedSQL <t/sql/04/07-mandatory.sql>;
+    my $runner = TEMP-QUERY-CLASS.new;
+    query($runner, a => 1, b => 2);
+    is $runner.last-query, 'SELECT $1 + $2;';
+    is-deeply $runner.last-pos, [1, 2];
+
+    throws-like { query($runner); },
+      Exception, message => "Missing required named parameters for SQL query query: a, b.";
+}
+
 
 done-testing;

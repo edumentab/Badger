@@ -16,6 +16,12 @@ class AST::Param does AST::Typed {
     has Str $.sigil;
     has Str $.name;
     has Bool $.named;
+    has Bool $.mandatory;
+
+    submethod BUILD(:$!sigil, :$!name, :$!named, :$!type-name, :$quantifier) {
+      # It's mandatory if it's a positional parameter OR has a bang
+      $!mandatory = !$!named || $quantifier eq '!';
+    }
 
     method Str {
         $.sigil ~ $.name
@@ -56,7 +62,6 @@ class AST::Sig {
         @!by-pos = @param.grep(!*.named);
 
         @!param = |@!by-pos, |@!by-name;
-        dd @!param;
     }
 }
 
@@ -112,17 +117,9 @@ grammar FileGrammar {
         || <?{ $*param-has-named }> <.panic: "Cannot have a positional parameter after a named one"> ]?
     }
 
-    proto token param { * }
-
-    multi token param:untyped {
-        <named> $<sigil>=<[$@%]> <name>
-        [ <?{ ~$<name> (elem) @*param-names }> <.panic: "Duplicate parameter name: $<name>">
-        || { @*param-names.push: ~$<name> } ]
-    }
-
-    multi token param:typed {
-        $<type>=<.qualified-name> \s+
-        <named> $<sigil>=<[ $ @ % ]> <name>
+    token param {
+        [ $<type>=<.qualified-name> \s+ ]?
+        <named> $<sigil>=<[ $ @ % ]> <name> $<quantifier>=<[ ! ]>?
         [ <?{ ~$<name> (elem) @*param-names }> <.panic: "Duplicate parameter name: $<name>">
         || { @*param-names.push: ~$<name> } ]
     }
@@ -199,19 +196,13 @@ class FileActions {
         make $/ eq ":"
     }
 
-    method param:untyped ($/) {
+    method param ($/) {
         make AST::Param.new(
             sigil => ~$<sigil>,
             name => ~$<name>,
+            type-name => $<type> ?? ~$<type> !! Nil,
             named => $<named>.made,
-        )
-    }
-    method param:typed ($/) {
-        make AST::Param.new(
-            sigil => ~$<sigil>,
-            name => ~$<name>,
-            type-name => ~$<type>,
-            named => $<named>.made,
+            quantifier => $<quantifier>
         )
     }
 }
@@ -295,18 +286,11 @@ role SignatureOverload[$sig] {
   #}
 }
 
-sub gen-sql-sub(AST::Module:D $module) {
-    my $name = $module.name;
-    my $return-class = build-return-class($name, $module.return);
-
-    my $params := Array.new(Parameter.new(:name('$connection'), :mandatory, :type(Any)));
-    for $module.param -> $param {
-        $params.push: Parameter.new(:name($param.name), :mandatory, :type($param.type), :named($param.named));
-    }
+#| Replaces `$a`, `$b`, ... with `$1` or `$2` in the SQL query.
+#| Uses C<type-to-ascription> to optionally ascribe them in the SQL.
+sub interpolate-sql($module) {
     my @arg-names = $module.param.map({ .sigil ~ .name });
-    my @named-names = $module.by-name.map(*.name);
-
-    my $sql = $module.content.trim.subst(/<[$@%]> (<[- \w]>+)/, {
+    $module.content.trim.subst(/<[$@%]> (<[- \w]>+)/, {
         with @arg-names.first(~$/, :k) -> $i {
             with type-to-ascription($module.param[$i]) {
                 '($' ~ 1 + $i ~ "::$_)"
@@ -320,7 +304,20 @@ sub gen-sql-sub(AST::Module:D $module) {
                 die "Unknown parameter: $/";
             }
         }
-    }, :g);
+    }, :g)
+}
+
+sub gen-sql-sub(AST::Module:D $module) {
+    my $name = $module.name;
+    my $return-class = build-return-class($name, $module.return);
+
+    my $params := Array.new(Parameter.new(:name('$connection'), :mandatory, :type(Any)));
+    for $module.param -> $param {
+        $params.push: Parameter.new(:name($param.name), :mandatory($param.mandatory), :type($param.type), :named($param.named));
+    }
+    my @named-names = $module.by-name.map(*.name);
+
+    my $sql = interpolate-sql($module);
 
     my $sig = Signature.new(:returns($return-class), :count(1.Num), :params($params.List));
 
@@ -328,8 +325,11 @@ sub gen-sql-sub(AST::Module:D $module) {
         unless @params == $module.by-pos {
             die "SQL query $name takes $module.by-pos.elems() positional SQL arguments, got @params.elems().";
         }
-        if %named-params.keys (-) @named-names -> $extra {
+        if %named-params.keys (-) $module.by-name.map(*.name) -> $extra {
             die "Extra named parameters for SQL query $name: $($extra.keys.sort.join: ", "). Named parameters: $($module.by-name.map(*.name).join: ", ").";
+        }
+        if $module.by-name.grep(*.mandatory).map(*.name) (-) %named-params.keys -> $missing {
+            die "Missing required named parameters for SQL query $name: $($missing.keys.sort.join: ", ").";
         }
         my %by-name-params = %(@named-names X=> Nil), %named-params;
 
