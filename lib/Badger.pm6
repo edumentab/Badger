@@ -274,7 +274,7 @@ sub type-to-ascription(AST::Param $param) {
     }
 
     given $param.sigil {
-        when "@" { "array[$sql-type]" }
+        when "@" { $sql-type ~ '[]' }
         default { $sql-type }
     }
 }
