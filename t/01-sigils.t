@@ -11,7 +11,7 @@ sub make-query-class(Any:U $return-class) {
 }
 
 {
-    use CheckedSQL <t/sql/01/00-count.sql>;
+    use Badger <t/sql/01/00-count.sql>;
     my $runner = make-query-class(class TEST0 { method rows { 3 } });
     my $result = base-query($runner, 1, 2);
     is $result, 3;
@@ -19,7 +19,7 @@ sub make-query-class(Any:U $return-class) {
 }
 
 {
-    use CheckedSQL <t/sql/01/01-scalar.sql>;
+    use Badger <t/sql/01/01-scalar.sql>;
     my $runner = make-query-class(class TEST1 { method value { 1 } });
     my $result = base-query($runner);
     is $result, 1;
@@ -27,7 +27,7 @@ sub make-query-class(Any:U $return-class) {
 }
 
 {
-    use CheckedSQL <t/sql/01/02-typed-scalar.sql>;
+    use Badger <t/sql/01/02-typed-scalar.sql>;
     my $new-called = False;
     class Result2 {
         has $.result;
@@ -44,7 +44,7 @@ sub make-query-class(Any:U $return-class) {
 }
 
 {
-    use CheckedSQL <t/sql/01/03-hash.sql>;
+    use Badger <t/sql/01/03-hash.sql>;
     my $runner = make-query-class(class TEST3 { method hash { result => 1 } });
     my %result = base-query($runner);
     is-deeply %result, %(result => 1);
@@ -52,12 +52,12 @@ sub make-query-class(Any:U $return-class) {
 }
 
 {
-    throws-like { EVAL "use CheckedSQL <t/sql/01/04-typed-hash-FAIL.sql>" },
+    throws-like { EVAL "use Badger <t/sql/01/04-typed-hash-FAIL.sql>" },
         Exception, message => /'Hash return cannot have a type ascription'/;
 }
 
 {
-    use CheckedSQL <t/sql/01/05-array.sql>;
+    use Badger <t/sql/01/05-array.sql>;
     my $runner = make-query-class(class TEST5 { method hashes { {result => 1}, {result => 2} } });
     my @result = base-query($runner);
     is-deeply @result, [{result => 1}, {result => 2}];
@@ -65,7 +65,7 @@ sub make-query-class(Any:U $return-class) {
 }
 
 {
-    use CheckedSQL <t/sql/01/06-typed-array.sql>;
+    use Badger <t/sql/01/06-typed-array.sql>;
     my $new-called = False;
     class Result6 {
         has $.result;
@@ -83,11 +83,11 @@ sub make-query-class(Any:U $return-class) {
     is $runner.last-params, ();
 }
 
-throws-like { EVAL "use CheckedSQL <t/sql/01/07-no-sigil-after-type-FAIL.sql>" },
+throws-like { EVAL "use Badger <t/sql/01/07-no-sigil-after-type-FAIL.sql>" },
         Exception, message => /'Expected sigil after return type ascription'/;
 
 {
-    use CheckedSQL <t/sql/01/08-returnless.sql>;
+    use Badger <t/sql/01/08-returnless.sql>;
     my $runner = make-query-class(class TEST8 { method rows { 0 } });
     my $result = base-query($runner);
     is $result, 0;

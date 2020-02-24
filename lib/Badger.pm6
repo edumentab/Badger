@@ -344,10 +344,8 @@ sub gen-sql-sub(AST::Module:D $module) {
 sub EXPORT(File $file) {
     my $content = $file.IO.slurp;
     my $ast = FileGrammar.parse($content, :actions(FileActions.new));
-    # TODO remove all this debugging code
     with $ast {
         my @h = $ast.made.map(&gen-sql-sub).flat;
-        #dd @h;
         return @h.hash;
     } else {
         return Map.new;

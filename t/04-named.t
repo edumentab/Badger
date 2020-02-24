@@ -9,7 +9,7 @@ my class TEMP-QUERY-CLASS {
 }
 
 {
-    use CheckedSQL <t/sql/04/00-named-typed.sql>;
+    use Badger <t/sql/04/00-named-typed.sql>;
     my $runner = TEMP-QUERY-CLASS.new;
     query-typed($runner);
     is $runner.last-query, 'SELECT ($1::int);';
@@ -17,7 +17,7 @@ my class TEMP-QUERY-CLASS {
 }
 
 {
-    use CheckedSQL <t/sql/04/01-named-untyped.sql>;
+    use Badger <t/sql/04/01-named-untyped.sql>;
     my $runner = TEMP-QUERY-CLASS.new;
     query-untyped($runner);
     is $runner.last-query, 'SELECT $1 + $1;';
@@ -28,14 +28,14 @@ my class TEMP-QUERY-CLASS {
 }
 
 {
-    use CheckedSQL <t/sql/04/02-extra-FAIL.sql>;
+    use Badger <t/sql/04/02-extra-FAIL.sql>;
     my $runner = TEMP-QUERY-CLASS.new;
     throws-like { query($runner, d => 2, c => 3); },
       Exception, message => "Extra named parameters for SQL query query: c, d. Named parameters: a, b.";
 }
 
 {
-    use CheckedSQL <t/sql/04/03-mixed.sql>;
+    use Badger <t/sql/04/03-mixed.sql>;
     my $runner = TEMP-QUERY-CLASS.new;
     query($runner, 1, 2, a => 3, b => 4);
     is $runner.last-query, 'SELECT $1 * $3 + $2 * $4;';
@@ -45,17 +45,17 @@ my class TEMP-QUERY-CLASS {
     is-deeply $runner.last-pos, [1, 2, 3, 4];
 }
 
-throws-like { EVAL "use CheckedSQL <t/sql/04/04-dupe-named-FAIL.sql>" },
+throws-like { EVAL "use Badger <t/sql/04/04-dupe-named-FAIL.sql>" },
         Exception, message => /'Duplicate parameter name'/;
 
-throws-like { EVAL "use CheckedSQL <t/sql/04/05-dupe-mixed-FAIL.sql>" },
+throws-like { EVAL "use Badger <t/sql/04/05-dupe-mixed-FAIL.sql>" },
         Exception, message => /'Duplicate parameter name'/;
 
-throws-like { EVAL "use CheckedSQL <t/sql/04/06-pos-after-named-FAIL.sql>" },
+throws-like { EVAL "use Badger <t/sql/04/06-pos-after-named-FAIL.sql>" },
         Exception, message => /'Cannot have a positional parameter after a named one'/;
 
 {
-    use CheckedSQL <t/sql/04/07-mandatory.sql>;
+    use Badger <t/sql/04/07-mandatory.sql>;
     my $runner = TEMP-QUERY-CLASS.new;
     query($runner, a => 1, b => 2);
     is $runner.last-query, 'SELECT $1 + $2;';
