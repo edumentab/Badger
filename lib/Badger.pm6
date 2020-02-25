@@ -1,10 +1,10 @@
 no precompilation;
 
-module AST {
+my module AST {
 
 }
 
-role AST::Typed {
+my role AST::Typed {
     has Str $.type-name;
 
     method type {
@@ -12,7 +12,7 @@ role AST::Typed {
     }
 }
 
-class AST::Param does AST::Typed {
+my class AST::Param does AST::Typed {
     has Str $.sigil;
     has Str $.name;
     has Bool $.named;
@@ -28,29 +28,29 @@ class AST::Param does AST::Typed {
     }
 }
 
-class AST::Return is repr('Uninstantiable') {
+my class AST::Return is repr('Uninstantiable') {
 
 }
-class AST::Return::SingleHash is AST::Return {
+my class AST::Return::SingleHash is AST::Return {
 
 }
-class AST::Return::MultiHash is AST::Return {
+my class AST::Return::MultiHash is AST::Return {
 
 }
-class AST::Return::Scalar is AST::Return {
+my class AST::Return::Scalar is AST::Return {
 
 }
-class AST::Return::Count is AST::Return {
+my class AST::Return::Count is AST::Return {
 
 }
-class AST::Return::Typed is AST::Return does AST::Typed {
+my class AST::Return::Typed is AST::Return does AST::Typed {
 
 }
-class AST::Return::MultiTyped is AST::Return does AST::Typed {
+my class AST::Return::MultiTyped is AST::Return does AST::Typed {
 
 }
 
-class AST::Sig {
+my class AST::Sig {
     has AST::Param:D @.by-name is required;
     has AST::Param:D @.by-pos is required;
     has AST::Param:D @.param is required;
@@ -65,13 +65,13 @@ class AST::Sig {
     }
 }
 
-class AST::Module {
+my class AST::Module {
     has Str $.name;
     has Str $.content;
     has AST::Sig:D $.sig is required handles <param return by-name by-pos>;
 }
 
-class X::ParseFail is Exception {
+my class ParseFail is Exception {
     has Str $.reason is required;
     has Cursor $.cursor is required;
 
@@ -89,7 +89,7 @@ class X::ParseFail is Exception {
 }
 
 #use Grammar::Tracer;
-grammar FileGrammar {
+my grammar FileGrammar {
     token TOP { <module>+ }
 
     token module {
@@ -149,11 +149,11 @@ grammar FileGrammar {
     token ws { \h* }
 
     method panic($reason) {
-        die X::ParseFail.new(:$reason, :cursor(self));
+        die ParseFail.new(:$reason, :cursor(self));
     }
 }
 
-class FileActions {
+my class FileActions {
     method TOP($/) {
         make $<module>>>.made
     }
@@ -207,9 +207,9 @@ class FileActions {
     }
 }
 
-subset File of Str where *.IO.e;
+my subset File of Str where *.IO.e;
 
-class PopulateClass {
+my class PopulateClass {
     has Code $.fn;
     method populate($obj) {
         $!fn($obj)
@@ -279,7 +279,7 @@ sub type-to-ascription(AST::Param $param) {
     }
 }
 
-role SignatureOverload[$sig] {
+my role SignatureOverload[$sig] {
   # Enable this to see the optimizer fail
   #method signature {
   #  $sig
@@ -321,7 +321,7 @@ sub gen-sql-sub(AST::Module:D $module) {
 
     my $sig = Signature.new(:returns($return-class), :count(1.Num), :params($params.List));
 
-    return "&$name" => (sub ($connection, *@params, *%named-params) {
+    my $sub = (sub ($connection, *@params, *%named-params) {
         unless @params == $module.by-pos {
             die "SQL query $name takes $module.by-pos.elems() positional SQL arguments, got @params.elems().";
         }
@@ -333,12 +333,14 @@ sub gen-sql-sub(AST::Module:D $module) {
         }
         my %by-name-params = %(@named-names X=> Nil), %named-params;
 
-        my $query = $connection.query($sql, |@params, %by-name-params.sort(*.key).map(*.value));
+        my $query = $connection.query($sql, |@params, |%by-name-params.sort(*.key).map(*.value));
         # NOTE DB::Pg returns an Int for non-SELECT queries. We should probably abstract all this in some adapter class.
         # TODO Maybe make sure that we have a AST::Return::Count in that case?
         return $query ~~ Int ?? $query !! $return-class.populate($query);
-    } does SignatureOverload.^parameterize($sig)),
-      "ReturnType-$name" => $return-class;
+    } does SignatureOverload.^parameterize($sig));
+    $sub.set_name($name);
+    return "&$name" => $sub,
+            "ReturnType-$name" => $return-class;
 }
 
 sub EXPORT(File $file) {
