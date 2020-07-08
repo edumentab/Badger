@@ -52,14 +52,6 @@ sub make-query-class(Any:U $return-class) {
 }
 
 {
-    use Badger <t/sql/01/03-hash.sql>;
-    my $runner = make-query-class(class TEST4 { method hash { Nil } });
-    my %result = base-query($runner);
-    is-deeply %result, %();
-    is $runner.last-params, ();
-}
-
-{
     throws-like { EVAL "use Badger <t/sql/01/04-typed-hash-FAIL.sql>" },
         Exception, message => /'Hash return cannot have a type ascription'/;
 }
@@ -99,6 +91,29 @@ throws-like { EVAL "use Badger <t/sql/01/07-no-sigil-after-type-FAIL.sql>" },
     my $runner = make-query-class(class TEST8 { method rows { 0 } });
     my $result = base-query($runner);
     is $result, 0;
+}
+
+{
+    use Badger <t/sql/01/03-hash.sql>;
+    my $runner = make-query-class(class TEST9 { method hash { Nil } });
+    my %result = base-query($runner);
+    is-deeply %result, %();
+    is $runner.last-params, ();
+}
+
+{
+    use Badger <t/sql/01/03-hash.sql>;
+    my $runner = make-query-class(class TEST10 { method hash {
+            if $++ {
+                flunk
+            } else {
+                %(a => 1)
+            }
+        }
+    });
+    my %result = base-query($runner);
+    is-deeply %result, %(a => 1);
+    is $runner.last-params, ();
 }
 
 done-testing;
