@@ -151,6 +151,8 @@ my %h = get-hash($db);
 # Result: `%(type => "comment", txt => "Hello world!")`
 ```
 
+If the database doesn't return anything, Badger gives you an empty hash back.
+
 ### `@`
 
 Returns an array of hashes.
