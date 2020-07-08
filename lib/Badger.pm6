@@ -221,7 +221,7 @@ multi sub build-return-class($, AST::Return::Count) {
 }
 
 multi sub build-return-class($, AST::Return::SingleHash) {
-    PopulateClass.new(fn => *.hash)
+    PopulateClass.new(fn => { .hash ?? .hash !! %() })
 }
 
 multi sub build-return-class($, AST::Return::MultiHash) {

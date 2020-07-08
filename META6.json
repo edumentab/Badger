@@ -1,7 +1,7 @@
 {
   "name": "Badger",
   "description": "SQL in Raku",
-  "version": "1.0",
+  "version": "1.0.1",
   "perl": "6.*",
   "auth": "edument",
   "depends": [],
