@@ -1,9 +1,9 @@
 {
   "name": "Badger",
-  "description": "SQL in Raku",
-  "version": "1.0.1",
+  "description": "Expose SQL queries as Raku subs",
+  "version": "1.1.0",
   "perl": "6.*",
-  "auth": "edument",
+  "auth": "zef:jnthn",
   "depends": [],
   "build-depends": [],
   "test-depends": [],
