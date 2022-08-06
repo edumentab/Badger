@@ -259,14 +259,14 @@ multi sub build-return-class($, AST::Return::Scalar) {
 }
 
 multi sub build-return-class($, AST::Return::Typed $typed) {
-    PopulateClass.new(fn => { $typed.type.new(|.hash) })
+    PopulateClass.new(fn => { $typed.type.new(|.hash<>) })
 }
 
 multi sub build-return-class($, AST::Return::MultiTyped $typed) {
     PopulateClass.new(fn => {
         my $type = $typed.type;
         .hashes.map({
-            $type.new(|$_)
+            $type.new(|$_<>)
         })
     })
 }
