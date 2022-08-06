@@ -1,4 +1,5 @@
 no precompilation;
+use MONKEY-SEE-NO-EVAL;
 
 my module AST {
 
@@ -6,9 +7,20 @@ my module AST {
 
 my role AST::Typed {
     has Str $.type-name;
+    has @.used-modules;
 
     method type {
-        $!type-name ?? ::($!type-name) !! Any
+        if $!type-name {
+            if @!used-modules {
+                EVAL @!used-modules.map({ "use $_;\n" }).join ~ "::('$!type-name')"
+            }
+            else {
+                ::($!type-name)
+            }
+        }
+        else {
+            Any
+        }
     }
 }
 
@@ -90,7 +102,16 @@ my class ParseFail is Exception {
 
 #use Grammar::Tracer;
 my grammar FileGrammar {
-    token TOP { <module>+ }
+    token TOP { <.ws> <use>* <.ws> <module>+ }
+
+    token use {
+        '--' <.ws>
+        'use' <.ws>
+        [
+        || <module-name=.qualified-name> \n+
+        || <.panic: 'Malformed use'>
+        ]
+    }
 
     token module {
         :my @*param-names;
@@ -154,8 +175,14 @@ my grammar FileGrammar {
 }
 
 my class FileActions {
+    my @used-modules;
+
     method TOP($/) {
         make $<module>>>.made
+    }
+
+    method use($/) {
+        push @used-modules, ~$<module-name>;
     }
 
     method module($/) {
@@ -186,8 +213,8 @@ my class FileActions {
     }
     method return:typed-sigil ($/) {
         given ~$<sigil> {
-            when '@' { make AST::Return::MultiTyped.new(type-name => ~$<type>) }
-            when '$' { make AST::Return::Typed.new(type-name => ~$<type>) }
+            when '@' { make AST::Return::MultiTyped.new(type-name => ~$<type>, :@used-modules) }
+            when '$' { make AST::Return::Typed.new(type-name => ~$<type>, :@used-modules) }
             default { die "Unrecognized sigil" }
         }
     }

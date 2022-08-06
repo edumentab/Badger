@@ -5,12 +5,16 @@ Badger, not an ORM (a snake).
 
 ### What's Badger?
 
-Badger is a SQL library that allows you to invoke SQL snippets as function as if it was Raku code.
-This way you can keep writing your SQL queries by hand for performance and tweakability, and your tools still recognize the `.sql` files to help you work with them.
+Badger is a SQL library that allows you to invoke SQL snippets as function as
+if it was Raku code. This way you can keep writing your SQL queries by hand
+for performance and tweakability, and your tools still recognize the `.sql`
+files to help you work with them.
 
 ### What does a Badger SQL file look like?
 
-A badger-compatible SQL file is just a normal SQL file, with signature headers. These signatures are intended to look like Raku signatures.
+A badger-compatible SQL file is just a normal SQL file, with signature headers.
+These signatures are intended to look like Raku signatures.
+
 The most basic example:
 
 ```sql
@@ -22,18 +26,18 @@ SELECT;
 
 You have to pass the .sql file(s) to the `use Badger` statement:
 
-```perl6
+```raku
 use Badger <sql/my-query.sql>; # The file in the previous code block
 ```
 
 This will generate this function Raku-side:
 
-```perl6
+```raku
 sub my-query(Database $db --> Int) { ... }
 ```
 
-Which you can call just like any other Raku subs,
-by passing any object that has an interface similar to `DB::Pg` (for now at least) as the connection.
+Which you can call just like any other Raku subs, by passing any object that
+has an interface similar to `DB::Pg` (for now at least) as the connection.
 
 For parameters and return values, see below.
 
@@ -47,7 +51,8 @@ Interpolation works for sigilled variables:
 SELECT $a + $b, @c
 ```
 
-This will generate a prepared query with `$a` and `$b` replaced `$1`, `$2` (or with `?`s depending on the RDBMS).
+This will generate a prepared query with `$a` and `$b` replaced `$1`, `$2`
+(or with `?`s depending on the RDBMS).
 
 ### Parameter Sigils
 
@@ -79,8 +84,6 @@ SELECT $a + $b
 ```
 
 Just like in Raku, you can't have a positional parameter after a named one.
-
-If a parameter is missing, 
 
 ### Mandatory Named Parameters 
 
@@ -123,18 +126,25 @@ WHERE token = $token
 Calls `.new` on the given type with all the data returned from the SQL query:
 
 ```sql
--- sub get-user(Int $id --> User)
+-- sub get-user(Int $id --> MyApp::Models::User)
 SELECT 1 AS id, 'steve' AS username
 ```
 
-```perl6
-class User {
+You'll usually need to import type module that provides the type, by placing
+a `use` at the top of the SQL file:
+
+```sql
+-- use MyApp::Models;
+```
+
+```raku
+class MyApp::Models::User {
   has Int $.id;
   has Str $.username;
 }
 ...
-my User $user = get-user(db, 1);
-# Result: `User.new(id => 1, :username<steve>);`
+my MyApp::Models::User $user = get-user(db, 1);
+# Result: `MyApp::Models::User.new(id => 1, :username<steve>);`
 ```
 
 ### `%`
